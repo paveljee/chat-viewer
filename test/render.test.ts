@@ -4,10 +4,10 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { convertFile, detectProvider, outputPathFor, renderMarkdown } from "../src";
 
-const claudeInputPath = "test/fixtures/tampermonkey/claude/input.json";
-const claudeOutputPath = "test/fixtures/tampermonkey/claude/output.md";
-const chatGptInputPath = "test/fixtures/tampermonkey/chatgpt/input.json";
-const chatGptOutputPath = "test/fixtures/tampermonkey/chatgpt/output.md";
+const claudeInputPath = "test/fixtures/tampermonkey/claude/ottosr/input.json";
+const claudeOutputPath = "test/fixtures/tampermonkey/claude/ottosr/output.md";
+const chatGptInputPath = "test/fixtures/tampermonkey/chatgpt/ottosr/input.json";
+const chatGptOutputPath = "test/fixtures/tampermonkey/chatgpt/ottosr/output.md";
 
 async function readJson(path: string): Promise<unknown> {
   return JSON.parse(await Bun.file(path).text()) as unknown;

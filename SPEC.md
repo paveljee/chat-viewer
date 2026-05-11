@@ -13,7 +13,7 @@ OpenAI chats
 render them as a
 human-readable Markdown file
 (example here:
-`test/fixtures/tampermonkey/claude/output.md`).
+`test/fixtures/tampermonkey/claude/ottosr/output.md`).
 
 Particular attention is paid to
 reflecting **all** text/media content
@@ -24,15 +24,15 @@ all branches of convo.
 
 There is a text fixture at
 `test/fixtures/tampermonkey`;
-`test/fixtures/tampermonkey/claude/input.json`
+`test/fixtures/tampermonkey/claude/ottosr/input.json`
 is sample input in raw Anthropic API format and
-`test/fixtures/tampermonkey/claude/output.md` is
+`test/fixtures/tampermonkey/claude/ottosr/output.md` is
 how the Claude tampermonkey script
 (`src/tampermonkey/Claude API Exporter-5.4.1.user.js`)
 presents it.
 Now,
 there is also an input fixture
-`test/fixtures/tampermonkey/chatgpt/input.json` for
+`test/fixtures/tampermonkey/chatgpt/ottosr/input.json` for
 the ChatGPT tampermonkey script
 (`src/tampermonkey/ChatGPT Exporter-2.32.0.user.js`)
 but no output
