@@ -27,16 +27,22 @@ Last updated: 2026-05-11
 - Claude rendering currently matches the checked-in golden fixture exactly.
 - ChatGPT/OpenAI JSON is detected, rendered with branch/version labels, and now
   has a checked-in golden Markdown fixture.
+- Claude artifact `create`/`update`/`rewrite` chains are reconstructed per
+  branch, with version metadata preserved in the Markdown.
+- ChatGPT thinking blocks and tool results are grouped into the related
+  assistant turns where possible, reducing standalone tool-noise while
+  preserving the raw content.
+- Tests now cover artifact reconstruction, media references, and unsupported
+  content fallbacks.
 
 ## Next Steps
 
-- [ ] Expand Claude artifact handling beyond the current basic inline artifact
-  rendering so create/update/rewrite chains are fully reconstructed.
-- [ ] Refine ChatGPT thinking/tool rendering so thought and tool-result chains
-  can be grouped into fewer, more readable assistant turns without losing raw
-  content.
-- [ ] Add tests for attachments/media references and unsupported content
-  fallbacks.
+- [ ] Review the grouped ChatGPT golden output with a human reader and tune
+  labels if needed.
+- [ ] Add fixture coverage for divergent Claude artifact branches if a real
+  export with that shape becomes available.
+- [ ] Consider small CLI ergonomics only after rendering behavior settles
+  further, such as an explicit output path option.
 
 ## Decisions
 
@@ -76,6 +82,15 @@ Last updated: 2026-05-11
 - [x] Added a concise `README.md`.
 - [x] Added AI coding environment context to `README.md`.
 - [x] Added Tampermonkey script acknowledgments to `README.md`.
+- [x] Reconstructed Claude artifact `create`/`update`/`rewrite` chains in the
+  renderer.
+- [x] Grouped ChatGPT thinking/tool-result chains into related assistant turns.
+- [x] Added tests for Claude artifact reconstruction, ChatGPT media references,
+  and unsupported content fallbacks.
+- [x] Regenerated `test/fixtures/tampermonkey/chatgpt/output.md` for the grouped
+  ChatGPT output.
+- [x] Re-ran `make test`: 7 passing tests.
+- [x] Re-ran `make lint`: strict TypeScript typecheck passing.
 
 ## Background Notes
 

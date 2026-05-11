@@ -55,6 +55,34 @@ interface VersionInfo {
   total: number;
 }
 
+interface ArtifactState {
+  title: string;
+  type: string | undefined;
+  language: string;
+  fullContent: string;
+  version: number;
+}
+
+interface ArtifactVersion {
+  id: string;
+  title: string;
+  command: string;
+  type: string | undefined;
+  language: string;
+  fullContent: string;
+  version: number;
+  updateInfo: string | undefined;
+  branchIndex: number;
+  isMainBranch: boolean;
+  createdAt: string | undefined;
+  status: string | undefined;
+}
+
+interface UpdateResult {
+  content: string;
+  info: string | undefined;
+}
+
 export function isClaudeConversation(value: unknown): value is ClaudeConversation {
   if (!isRecord(value)) return false;
   return Array.isArray(value.chat_messages) && typeof value.uuid === "string";
@@ -64,6 +92,7 @@ export function renderClaudeConversation(conversation: ClaudeConversation, optio
   const timeZone = options.timeZone;
   const { branches, mainUuids, messageBranchMap } = buildBranchData(conversation);
   const versionInfo = buildVersionInfo(conversation.chat_messages);
+  const artifactIndex = buildArtifactIndex(branches, messageBranchMap);
   const messages = [...conversation.chat_messages].sort((a, b) => a.index - b.index);
   const sections: string[] = [];
 
@@ -86,6 +115,7 @@ export function renderClaudeConversation(conversation: ClaudeConversation, optio
       mainUuids,
       messageBranchMap,
       versionInfo,
+      artifactIndex,
       isCodeExecutionConversation: conversation.settings?.enabled_monkeys_in_a_barrel === true,
       timeZone
     }));
@@ -113,6 +143,7 @@ function renderMessage(
     mainUuids: Set<string>;
     messageBranchMap: Map<string, number>;
     versionInfo: Map<string, VersionInfo>;
+    artifactIndex: WeakMap<ClaudeContent, ArtifactVersion>;
     isCodeExecutionConversation: boolean;
     timeZone: string | undefined;
   }
@@ -153,7 +184,9 @@ function renderContent(
   message: ClaudeMessage,
   context: {
     branches: BranchInfo[];
+    artifactIndex: WeakMap<ClaudeContent, ArtifactVersion>;
     isCodeExecutionConversation: boolean;
+    timeZone: string | undefined;
   }
 ): string | undefined {
   switch (content.type) {
@@ -164,7 +197,7 @@ function renderContent(
       return renderThinking(content, context.isCodeExecutionConversation);
 
     case "tool_use":
-      return renderToolUse(content);
+      return renderToolUse(content, context);
 
     case "tool_result":
       return renderToolResult(content);
@@ -188,14 +221,20 @@ function renderThinking(content: ClaudeContent, isCodeExecutionConversation: boo
   ].join("\n");
 }
 
-function renderToolUse(content: ClaudeContent): string {
+function renderToolUse(
+  content: ClaudeContent,
+  context: {
+    artifactIndex: WeakMap<ClaudeContent, ArtifactVersion>;
+    timeZone: string | undefined;
+  }
+): string {
   if (content.name === "web_search" && isRecord(content.input)) {
     const query = asString(content.input.query) ?? "";
     return `**🔍 Web Search:** \`${query}\``;
   }
 
   if (content.name === "artifacts" && isRecord(content.input)) {
-    return renderArtifact(content.input);
+    return renderArtifact(content.input, context.artifactIndex.get(content), context.timeZone);
   }
 
   const name = content.name ?? "tool";
@@ -221,17 +260,24 @@ function renderToolResult(content: ClaudeContent): string {
   return [`**Tool Result:** \`${content.name ?? "tool"}\``, jsonBlock(content.content ?? null)].join("\n\n");
 }
 
-function renderArtifact(input: Record<string, unknown>): string {
-  const title = asString(input.title) ?? "Artifact";
-  const id = asString(input.id);
-  const command = asString(input.command);
-  const artifactContent = asString(input.content);
-  const language = asString(input.language) ?? "";
+function renderArtifact(input: Record<string, unknown>, version: ArtifactVersion | undefined, timeZone: string | undefined): string {
+  const title = version?.title ?? asString(input.title) ?? "Artifact";
+  const id = version?.id ?? asString(input.id);
+  const command = version?.command ?? asString(input.command);
+  const artifactContent = version?.fullContent ?? asString(input.content);
+  const language = version?.language ?? asString(input.language) ?? "";
   const lines = ["<details>", `<summary>${title}</summary>`, ""];
 
   if (id) lines.push(`> *ID:* \`${id}\`  `);
   if (command) lines.push(`> *Command:* \`${command}\``);
-  if (id || command) lines.push("");
+  if (version) {
+    lines.push(`> *Branch:* branch${version.branchIndex}${version.isMainBranch ? " (main)" : ""}  `);
+    lines.push(`> *Version:* ${version.version}  `);
+    if (version.createdAt) lines.push(`> *Created:* ${formatDate(version.createdAt, timeZone)}  `);
+    if (version.updateInfo) lines.push(`> *Update Info:* ${version.updateInfo}  `);
+    if (version.status) lines.push(`> *Status:* ${version.status}`);
+  }
+  if (id || command || version) lines.push("");
 
   if (artifactContent !== undefined) {
     lines.push(`\`\`\`${language}`);
@@ -436,4 +482,136 @@ function buildVersionInfo(messages: ClaudeMessage[]): Map<string, VersionInfo> {
   }
 
   return versionInfo;
+}
+
+function buildArtifactIndex(branches: BranchInfo[], messageBranchMap: Map<string, number>): WeakMap<ClaudeContent, ArtifactVersion> {
+  const artifactIndex = new WeakMap<ClaudeContent, ArtifactVersion>();
+
+  for (const branch of branches) {
+    const states = new Map<string, ArtifactState>();
+
+    for (const message of branch.path) {
+      for (const content of message.content) {
+        if (content.type !== "tool_use" || content.name !== "artifacts" || !isRecord(content.input)) {
+          continue;
+        }
+
+        const artifactVersion = applyArtifactCommand(content.input, states, branch, message);
+        if (artifactVersion) {
+          const renderedBranch = messageBranchMap.get(message.uuid);
+          if (renderedBranch === undefined || renderedBranch === branch.index) {
+            artifactIndex.set(content, artifactVersion);
+          }
+        }
+      }
+    }
+  }
+
+  return artifactIndex;
+}
+
+function applyArtifactCommand(
+  input: Record<string, unknown>,
+  states: Map<string, ArtifactState>,
+  branch: BranchInfo,
+  message: ClaudeMessage
+): ArtifactVersion | undefined {
+  const id = asString(input.id);
+  if (!id) return undefined;
+
+  const previous = states.get(id);
+  const command = asString(input.command) ?? "unknown";
+  const fallbackTitle = `Artifact ${id}`;
+  let title = asString(input.title) ?? previous?.title ?? fallbackTitle;
+  let type = asString(input.type) ?? previous?.type;
+  let language = asString(input.language) ?? previous?.language ?? "";
+  let fullContent = previous?.fullContent ?? "";
+  let updateInfo: string | undefined;
+
+  switch (command) {
+    case "create":
+      fullContent = asString(input.content) ?? "";
+      title = asString(input.title) ?? fallbackTitle;
+      type = asString(input.type);
+      language = asString(input.language) ?? "";
+      break;
+
+    case "rewrite":
+      fullContent = asString(input.content) ?? "";
+      title = asString(input.title) ?? previous?.title ?? fallbackTitle;
+      type = asString(input.type) ?? previous?.type;
+      language = asString(input.language) ?? previous?.language ?? "";
+      break;
+
+    case "update": {
+      const result = applyUpdate(fullContent, asString(input.old_str) ?? "", asString(input.new_str) ?? "");
+      fullContent = result.content;
+      updateInfo = result.info;
+      break;
+    }
+
+    default:
+      updateInfo = `Unknown artifact command: ${command}`;
+      break;
+  }
+
+  const nextState: ArtifactState = {
+    title,
+    type,
+    language,
+    fullContent,
+    version: (previous?.version ?? 0) + 1
+  };
+  states.set(id, nextState);
+
+  return {
+    id,
+    title,
+    command,
+    type,
+    language,
+    fullContent,
+    version: nextState.version,
+    updateInfo,
+    branchIndex: branch.index,
+    isMainBranch: branch.isMain,
+    createdAt: asString(input.stop_timestamp) ?? asString(input.start_timestamp) ?? message.created_at,
+    status: message.stop_reason === "user_canceled" ? "CANCELED" : undefined
+  };
+}
+
+function applyUpdate(previousContent: string, oldStr: string, newStr: string): UpdateResult {
+  if (!previousContent || !oldStr) {
+    if (newStr) {
+      return {
+        content: newStr + (previousContent ? `\n${previousContent}` : ""),
+        info: "[WARNING: Added content to beginning - missing old_str or previousContent]"
+      };
+    }
+
+    return {
+      content: previousContent,
+      info: "Cannot apply update: missing previousContent, oldStr, and newStr"
+    };
+  }
+
+  const updatedContent = previousContent.replace(oldStr, newStr);
+  if (updatedContent !== previousContent) {
+    return {
+      content: updatedContent,
+      info: "Successfully applied update"
+    };
+  }
+
+  if (newStr) {
+    return {
+      content: `${newStr}\n${previousContent}`,
+      info: "[WARNING: Added content to beginning - old_str not found in content]"
+    };
+  }
+
+  return {
+    content: previousContent,
+    info: "Update did not change content - old string not found"
+  };
 }

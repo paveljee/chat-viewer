@@ -42,6 +42,13 @@ interface VersionInfo {
   total: number;
 }
 
+interface RenderEntry {
+  node: ChatGptNode;
+  thinkingBlocks: string[];
+  toolResults: ChatGptNode[];
+  acceptsToolResults: boolean;
+}
+
 export function isChatGptExport(value: unknown): boolean {
   if (Array.isArray(value)) {
     return value.every((entry) => isChatGptConversation(entry));
@@ -90,10 +97,9 @@ function renderChatGptConversation(conversation: ChatGptConversation, options: R
   sections.push(`${formatHeaderLines(headerLines)}\n\n# ${title}`);
 
   let visibleIndex = 0;
-  for (const node of nodes) {
-    if (!node.message || shouldSkipMessage(node.message)) continue;
+  for (const entry of buildRenderEntries(nodes)) {
     sections.push("__________");
-    sections.push(renderMessage(node, visibleIndex, options, branchData, versionInfo));
+    sections.push(renderMessage(entry, visibleIndex, options, branchData, versionInfo));
     visibleIndex += 1;
   }
 
@@ -129,7 +135,7 @@ function orderedNodes(conversation: ChatGptConversation): ChatGptNode[] {
 }
 
 function renderMessage(
-  node: ChatGptNode,
+  entry: RenderEntry,
   index: number,
   options: RenderOptions,
   branchData: {
@@ -138,6 +144,7 @@ function renderMessage(
   },
   versionInfo: Map<ChatGptNode, VersionInfo>
 ): string {
+  const { node } = entry;
   const message = node.message;
   if (!message) return "";
 
@@ -163,7 +170,13 @@ function renderMessage(
 
   headerLines.push(`*Created:* ${formatDate(message.create_time, options.timeZone)}`);
 
-  return [formatHeaderLines(headerLines), renderContent(message), renderMetadata(message)].filter(Boolean).join("\n\n");
+  return [
+    formatHeaderLines(headerLines),
+    ...entry.thinkingBlocks,
+    renderContent(message),
+    renderMetadata(message),
+    ...entry.toolResults.map((toolNode) => renderGroupedToolResult(toolNode, options.timeZone))
+  ].filter(Boolean).join("\n\n");
 }
 
 function renderContent(message: ChatGptMessage): string {
@@ -232,6 +245,18 @@ function renderMetadata(message: ChatGptMessage): string {
   ].filter((section) => section.length > 0);
 
   return sections.join("\n\n");
+}
+
+function renderGroupedToolResult(node: ChatGptNode, timeZone: string | undefined): string {
+  const message = node.message;
+  if (!message) return "";
+
+  return [
+    `**Grouped ${roleName(message)} Result**`,
+    `*Created:* ${formatDate(message.create_time, timeZone)}`,
+    renderContent(message),
+    renderMetadata(message)
+  ].filter(Boolean).join("\n\n");
 }
 
 function renderSearchQueries(metadata: Record<string, unknown>): string {
@@ -312,6 +337,47 @@ function shouldSkipMessage(message: ChatGptMessage): boolean {
   if (message.metadata?.is_visually_hidden_from_conversation === true) return true;
 
   return false;
+}
+
+function buildRenderEntries(nodes: ChatGptNode[]): RenderEntry[] {
+  const entries: RenderEntry[] = [];
+  let pendingThinkingBlocks: string[] = [];
+
+  for (const node of nodes) {
+    const message = node.message;
+    if (!message) continue;
+
+    if (message.content && asString(message.content.content_type) === "thoughts") {
+      const renderedThinking = renderThoughts(message.content);
+      if (renderedThinking) {
+        pendingThinkingBlocks.push(renderedThinking);
+      }
+      continue;
+    }
+
+    if (shouldSkipMessage(message)) continue;
+
+    const lastEntry = entries.at(-1);
+    if (message.author?.role === "tool" && lastEntry?.acceptsToolResults) {
+      lastEntry.toolResults.push(node);
+      continue;
+    }
+
+    const acceptsToolResults = message.author?.role === "assistant" && message.recipient !== undefined && message.recipient !== "all";
+    entries.push({
+      node,
+      thinkingBlocks: pendingThinkingBlocks,
+      toolResults: [],
+      acceptsToolResults
+    });
+    pendingThinkingBlocks = [];
+  }
+
+  if (pendingThinkingBlocks.length > 0 && entries.length > 0) {
+    entries[entries.length - 1]?.thinkingBlocks.push(...pendingThinkingBlocks);
+  }
+
+  return entries;
 }
 
 function roleName(message: ChatGptMessage): string {
