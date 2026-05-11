@@ -39,6 +39,13 @@ but no output
 because it's suboptimal and
 we should stick to the Claude script approach.
 
+Another fixture:
+`test/fixtures/tampermonkey/chatgpt/doi-platforms/input.json`.
+This is an example of OpenAI deep research and
+is an important case to ensure
+all artifacts are indeed shown
+in the output Markdown.
+
 All tests are implemented using Bun.
 Everything should run through mise.
 mise version is pinned in `install.sh`.
