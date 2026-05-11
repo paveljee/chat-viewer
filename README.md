@@ -43,3 +43,13 @@ Relevant editor/host context: VS Code `1.119.0` on Darwin arm64 `24.6.0`.
 My normal workflow is to read `SPEC.md` for project intent, inspect the repo,
 edit files, run the project checks, and keep `WORK.md` updated with current
 state and next steps.
+
+## Acknowledgments
+
+This project uses Tampermonkey exporter outputs and scripts as reference
+material. Thanks to their authors:
+
+- **Claude API Exporter** `5.4.1` by **MRL**  
+  <https://update.greasyfork.org/scripts/542117/Claude%20API%20Exporter.user.js>
+- **ChatGPT Exporter** `2.32.0` by **pionxzh**  
+  <https://update.greasyfork.org/scripts/456055/ChatGPT%20Exporter.user.js>

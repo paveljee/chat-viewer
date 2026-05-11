@@ -75,6 +75,7 @@ Last updated: 2026-05-11
 - [x] Re-ran `make lint`: strict TypeScript typecheck passing.
 - [x] Added a concise `README.md`.
 - [x] Added AI coding environment context to `README.md`.
+- [x] Added Tampermonkey script acknowledgments to `README.md`.
 
 ## Background Notes
 
