@@ -37,7 +37,6 @@ Last updated: 2026-05-11
   content.
 - [ ] Add tests for attachments/media references and unsupported content
   fallbacks.
-- [ ] Add README or usage notes once CLI behavior settles.
 
 ## Decisions
 
@@ -74,6 +73,7 @@ Last updated: 2026-05-11
 - [x] Changed ChatGPT test coverage from a smoke test to exact golden comparison.
 - [x] Re-ran `make test`: 5 passing tests.
 - [x] Re-ran `make lint`: strict TypeScript typecheck passing.
+- [x] Added a concise `README.md`.
 
 ## Background Notes
 
