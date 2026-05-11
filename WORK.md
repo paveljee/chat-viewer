@@ -18,31 +18,27 @@ Last updated: 2026-05-11
 
 ## Current State
 
-- The repo currently contains the project spec, setup scripts, Tampermonkey
-  exporter references, and JSON/Markdown fixtures.
-- No Bun package, TypeScript source, CLI entrypoint, or Bun tests have been
-  created yet.
+- The repo now has a Bun/TypeScript project scaffold, CLI entrypoint, provider
+  detection, renderers, and Bun tests.
 - The target is a Bun/TypeScript CLI that reads raw Anthropic or OpenAI
   conversation JSON and writes a Markdown file next to the input with the same
   base filename.
 - The Claude fixture and exporter output style are the primary output contract.
-- The ChatGPT exporter is useful for understanding the OpenAI JSON shape, but
-  its Markdown behavior is too lossy for the project goal.
+- Claude rendering currently matches the checked-in golden fixture exactly.
+- ChatGPT/OpenAI JSON is detected and rendered conservatively, but does not yet
+  have a golden output fixture or full fidelity acceptance coverage.
 
 ## Next Steps
 
-- [ ] Scaffold the Bun/TypeScript project files:
-  `package.json`, `tsconfig.json`, source directory, and test layout.
-- [ ] Add a CLI entrypoint that accepts one JSON file path and writes adjacent
-  `.md` output.
-- [ ] Implement provider detection for Claude-style and ChatGPT-style raw JSON.
-- [ ] Implement the first Claude renderer against
-  `test/fixtures/tampermonkey/claude/input.json`.
-- [ ] Add a golden test comparing generated Claude Markdown to
-  `test/fixtures/tampermonkey/claude/output.md`.
-- [ ] Run through `mise`/`make test` and `make lint` once the project scaffolding
-  exists.
-- [ ] Start OpenAI coverage after Claude golden output is reproducible.
+- [ ] Expand Claude artifact handling beyond the current basic inline artifact
+  rendering so create/update/rewrite chains are fully reconstructed.
+- [ ] Define the desired ChatGPT/OpenAI golden Markdown output style, then add a
+  checked-in output fixture.
+- [ ] Improve ChatGPT/OpenAI branch labeling so alternate paths are as explicit
+  as Claude branches.
+- [ ] Add tests for attachments/media references and unsupported content
+  fallbacks.
+- [ ] Add README or usage notes once CLI behavior settles.
 
 ## Decisions
 
@@ -60,6 +56,18 @@ Last updated: 2026-05-11
   exporter behavior.
 - [x] Added an executive-oriented AI interpretation to `SPEC.md`.
 - [x] Created this notebook.
+- [x] Scaffolded Bun/TypeScript project files:
+  `package.json`, `bun.lock`, `tsconfig.json`, `src/`, and `test/`.
+- [x] Added CLI entrypoint at `src/cli.ts`.
+- [x] Implemented provider detection for Claude-style and ChatGPT-style raw JSON.
+- [x] Implemented Claude Markdown rendering against
+  `test/fixtures/tampermonkey/claude/input.json`.
+- [x] Added a golden test comparing generated Claude Markdown to
+  `test/fixtures/tampermonkey/claude/output.md`.
+- [x] Added conservative ChatGPT rendering and a smoke test against the ChatGPT
+  fixture.
+- [x] Ran `make test`: 5 passing tests.
+- [x] Ran `make lint`: strict TypeScript typecheck passing.
 
 ## Background Notes
 
