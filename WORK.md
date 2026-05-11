@@ -25,17 +25,16 @@ Last updated: 2026-05-11
   base filename.
 - The Claude fixture and exporter output style are the primary output contract.
 - Claude rendering currently matches the checked-in golden fixture exactly.
-- ChatGPT/OpenAI JSON is detected and rendered conservatively, but does not yet
-  have a golden output fixture or full fidelity acceptance coverage.
+- ChatGPT/OpenAI JSON is detected, rendered with branch/version labels, and now
+  has a checked-in golden Markdown fixture.
 
 ## Next Steps
 
 - [ ] Expand Claude artifact handling beyond the current basic inline artifact
   rendering so create/update/rewrite chains are fully reconstructed.
-- [ ] Define the desired ChatGPT/OpenAI golden Markdown output style, then add a
-  checked-in output fixture.
-- [ ] Improve ChatGPT/OpenAI branch labeling so alternate paths are as explicit
-  as Claude branches.
+- [ ] Refine ChatGPT thinking/tool rendering so thought and tool-result chains
+  can be grouped into fewer, more readable assistant turns without losing raw
+  content.
 - [ ] Add tests for attachments/media references and unsupported content
   fallbacks.
 - [ ] Add README or usage notes once CLI behavior settles.
@@ -68,6 +67,13 @@ Last updated: 2026-05-11
   fixture.
 - [x] Ran `make test`: 5 passing tests.
 - [x] Ran `make lint`: strict TypeScript typecheck passing.
+- [x] Improved ChatGPT/OpenAI rendering with branch labels, version labels,
+  search query rendering, search result rendering, content references, and
+  citation sections.
+- [x] Added `test/fixtures/tampermonkey/chatgpt/output.md` as a golden fixture.
+- [x] Changed ChatGPT test coverage from a smoke test to exact golden comparison.
+- [x] Re-ran `make test`: 5 passing tests.
+- [x] Re-ran `make lint`: strict TypeScript typecheck passing.
 
 ## Background Notes
 

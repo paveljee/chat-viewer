@@ -7,6 +7,7 @@ import { convertFile, detectProvider, outputPathFor, renderMarkdown } from "../s
 const claudeInputPath = "test/fixtures/tampermonkey/claude/input.json";
 const claudeOutputPath = "test/fixtures/tampermonkey/claude/output.md";
 const chatGptInputPath = "test/fixtures/tampermonkey/chatgpt/input.json";
+const chatGptOutputPath = "test/fixtures/tampermonkey/chatgpt/output.md";
 
 async function readJson(path: string): Promise<unknown> {
   return JSON.parse(await Bun.file(path).text()) as unknown;
@@ -32,13 +33,11 @@ describe("Claude rendering", () => {
 });
 
 describe("ChatGPT rendering", () => {
-  test("renders a conservative Markdown record", async () => {
+  test("matches the ChatGPT golden fixture", async () => {
     const input = await readJson(chatGptInputPath);
-    const markdown = renderMarkdown(input);
+    const expected = await Bun.file(chatGptOutputPath).text();
 
-    expect(markdown).toContain("# LLM Screening Concerns");
-    expect(markdown).toContain("## 0 - Human");
-    expect(markdown).toContain("## 1 - ChatGPT");
+    expect(renderMarkdown(input)).toBe(expected);
   });
 });
 

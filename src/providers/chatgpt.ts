@@ -31,6 +31,17 @@ interface ChatGptMessage {
   metadata?: Record<string, unknown>;
 }
 
+interface BranchInfo {
+  index: number;
+  path: ChatGptNode[];
+  isMain: boolean;
+}
+
+interface VersionInfo {
+  version: number;
+  total: number;
+}
+
 export function isChatGptExport(value: unknown): boolean {
   if (Array.isArray(value)) {
     return value.every((entry) => isChatGptConversation(entry));
@@ -60,6 +71,8 @@ function isChatGptConversation(value: unknown): value is ChatGptConversation {
 
 function renderChatGptConversation(conversation: ChatGptConversation, options: RenderOptions): string {
   const nodes = orderedNodes(conversation);
+  const branchData = buildBranchData(conversation);
+  const versionInfo = buildVersionInfo(conversation);
   const model = extractModel(nodes);
   const id = conversation.id ?? conversation.conversation_id ?? "unknown";
   const title = conversation.title ?? "ChatGPT Conversation";
@@ -80,7 +93,7 @@ function renderChatGptConversation(conversation: ChatGptConversation, options: R
   for (const node of nodes) {
     if (!node.message || shouldSkipMessage(node.message)) continue;
     sections.push("__________");
-    sections.push(renderMessage(node, visibleIndex, options));
+    sections.push(renderMessage(node, visibleIndex, options, branchData, versionInfo));
     visibleIndex += 1;
   }
 
@@ -115,12 +128,30 @@ function orderedNodes(conversation: ChatGptConversation): ChatGptNode[] {
   return out;
 }
 
-function renderMessage(node: ChatGptNode, index: number, options: RenderOptions): string {
+function renderMessage(
+  node: ChatGptNode,
+  index: number,
+  options: RenderOptions,
+  branchData: {
+    branchMap: Map<ChatGptNode, number>;
+    mainNodes: Set<ChatGptNode>;
+  },
+  versionInfo: Map<ChatGptNode, VersionInfo>
+): string {
   const message = node.message;
   if (!message) return "";
 
   const role = roleName(message);
   const headerLines = [`## ${index} - ${role}`];
+  const branchNumber = branchData.branchMap.get(node) ?? "?";
+  const branchKind = branchData.mainNodes.has(node) ? "Main" : "Side";
+  const version = versionInfo.get(node);
+
+  headerLines.push(`*Branch:* ${branchNumber} | ${branchKind}`);
+
+  if (version) {
+    headerLines.push(`*Version:* ${version.version} of ${version.total}`);
+  }
 
   if (message.recipient && message.recipient !== "all") {
     headerLines.push(`*Recipient:* \`${message.recipient}\``);
@@ -132,7 +163,7 @@ function renderMessage(node: ChatGptNode, index: number, options: RenderOptions)
 
   headerLines.push(`*Created:* ${formatDate(message.create_time, options.timeZone)}`);
 
-  return [formatHeaderLines(headerLines), renderContent(message)].filter(Boolean).join("\n\n");
+  return [formatHeaderLines(headerLines), renderContent(message), renderMetadata(message)].filter(Boolean).join("\n\n");
 }
 
 function renderContent(message: ChatGptMessage): string {
@@ -183,20 +214,101 @@ function renderMultimodalPart(part: unknown): string {
 }
 
 function renderThoughts(content: Record<string, unknown>): string {
-  const thoughts = asArray(content.thoughts)
-    .map((thought) => {
-      if (!isRecord(thought)) return "";
-      return asString(thought.content) ?? asString(thought.summary) ?? "";
-    })
-    .filter((text) => text.length > 0)
-    .join("\n\n");
+  const thoughts = thoughtText(content);
+  if (!thoughts) return "";
 
   return `<details>\n<summary>ChatGPT thinking</summary>\n\n${thoughts}\n\n</details>`;
+}
+
+function renderMetadata(message: ChatGptMessage): string {
+  const metadata = message.metadata;
+  if (!metadata) return "";
+
+  const sections = [
+    renderSearchQueries(metadata),
+    renderSearchResultGroups(metadata),
+    renderContentReferences(metadata),
+    renderCitations(metadata)
+  ].filter((section) => section.length > 0);
+
+  return sections.join("\n\n");
+}
+
+function renderSearchQueries(metadata: Record<string, unknown>): string {
+  const searchModelQueries = metadata.search_model_queries;
+  if (!isRecord(searchModelQueries)) return "";
+
+  const queries = asArray(searchModelQueries.queries).filter((query): query is string => typeof query === "string");
+  if (queries.length === 0) return "";
+
+  return ["**Search Queries:**", "", ...queries.map((query, index) => `${index + 1}. ${query}`)].join("\n");
+}
+
+function renderSearchResultGroups(metadata: Record<string, unknown>): string {
+  const groups = asArray(metadata.search_result_groups).filter(isSearchResultGroup);
+  if (groups.length === 0) return "";
+
+  const lines = [`**Search Results (${groups.reduce((count, group) => count + group.entries.length, 0)} found)**`, ""];
+
+  for (const group of groups) {
+    lines.push(`*Domain:* ${group.domain}`);
+    for (const entry of group.entries) {
+      lines.push(`- [${entry.title}](${entry.url})`);
+      if (entry.snippet) lines.push(`  ${entry.snippet}`);
+      if (entry.attribution) lines.push(`  *Source:* ${entry.attribution}`);
+    }
+    lines.push("");
+  }
+
+  return lines.join("\n").trimEnd();
+}
+
+function renderContentReferences(metadata: Record<string, unknown>): string {
+  const refs = asArray(metadata.content_references).filter(isRecord);
+  if (refs.length === 0) return "";
+
+  const lines = ["**Content References:**", ""];
+
+  refs.forEach((ref, index) => {
+    const matchedText = asString(ref.matched_text);
+    const alt = asString(ref.alt);
+    const items = asArray(ref.items).filter(isReferenceItem);
+
+    lines.push(`${index + 1}. ${matchedText ? `\`${matchedText}\`` : "reference"}`);
+    if (alt) lines.push(`   *Rendered as:* ${alt}`);
+    for (const item of items) {
+      lines.push(`   - [${item.title}](${item.url})`);
+      const supportingWebsites = asArray(item.supporting_websites).filter(isSupportingWebsite);
+      for (const supporting of supportingWebsites) {
+        lines.push(`     - Supporting: [${supporting.title}](${supporting.url})`);
+      }
+    }
+  });
+
+  return lines.join("\n");
+}
+
+function renderCitations(metadata: Record<string, unknown>): string {
+  const citations = asArray(metadata.citations).filter(isRecord);
+  if (citations.length === 0) return "";
+
+  const lines = ["**Citations:**", ""];
+
+  citations.forEach((citation, index) => {
+    const title = isRecord(citation.metadata) ? asString(citation.metadata.title) : undefined;
+    const url = asString(citation.url) ?? (isRecord(citation.metadata) ? asString(citation.metadata.url) : undefined);
+    const label = title ?? url ?? "citation";
+
+    lines.push(`${index + 1}. ${url ? `[${label}](${url})` : label}`);
+  });
+
+  return lines.join("\n");
 }
 
 function shouldSkipMessage(message: ChatGptMessage): boolean {
   if (message.author?.role === "system") return true;
   if (message.content && asString(message.content.content_type) === "user_editable_context") return true;
+  if (message.content && asString(message.content.content_type) === "thoughts" && !thoughtText(message.content)) return true;
   if (message.metadata?.is_visually_hidden_from_conversation === true) return true;
 
   return false;
@@ -225,4 +337,148 @@ function compareNodes(a: ChatGptNode, b: ChatGptNode): number {
   if (aTime !== bTime) return aTime - bTime;
 
   return String(a.id ?? "").localeCompare(String(b.id ?? ""));
+}
+
+function buildBranchData(conversation: ChatGptConversation): {
+  branches: BranchInfo[];
+  branchMap: Map<ChatGptNode, number>;
+  mainNodes: Set<ChatGptNode>;
+} {
+  const roots = Object.values(conversation.mapping).filter((node) => !node.parent || !conversation.mapping[node.parent]);
+  const leafPaths = collectLeafPaths(conversation, roots.sort(compareNodes));
+  const currentNode = conversation.current_node ? conversation.mapping[conversation.current_node] : undefined;
+  const mainPath = currentNode ? buildPath(conversation, currentNode) : (leafPaths[0] ?? []);
+  const mainLeaf = mainPath.at(-1);
+  const mainNodes = new Set(mainPath);
+  const branches = leafPaths
+    .map((path) => ({
+      path,
+      isMain: mainLeaf !== undefined && path.at(-1) === mainLeaf
+    }))
+    .sort(compareBranches)
+    .map((branch, index) => ({
+      ...branch,
+      index: index + 1
+    }));
+  const branchMap = new Map<ChatGptNode, number>();
+
+  for (const branch of branches) {
+    for (const node of branch.path) {
+      if (!branchMap.has(node)) {
+        branchMap.set(node, branch.index);
+      }
+    }
+  }
+
+  const mainBranch = branches.find((branch) => branch.isMain);
+  if (mainBranch) {
+    for (const node of mainBranch.path) {
+      branchMap.set(node, mainBranch.index);
+    }
+  }
+
+  return { branches, branchMap, mainNodes };
+}
+
+function collectLeafPaths(conversation: ChatGptConversation, roots: ChatGptNode[]): ChatGptNode[][] {
+  const paths: ChatGptNode[][] = [];
+
+  const visit = (node: ChatGptNode, path: ChatGptNode[]) => {
+    const nextPath = [...path, node];
+    const children = (node.children ?? []).map((childId) => conversation.mapping[childId]).filter((child): child is ChatGptNode => child !== undefined);
+
+    if (children.length === 0) {
+      paths.push(nextPath);
+      return;
+    }
+
+    children.sort(compareNodes).forEach((child) => visit(child, nextPath));
+  };
+
+  roots.forEach((root) => visit(root, []));
+
+  return paths;
+}
+
+function buildPath(conversation: ChatGptConversation, leaf: ChatGptNode): ChatGptNode[] {
+  const path: ChatGptNode[] = [];
+  let current: ChatGptNode | undefined = leaf;
+
+  while (current) {
+    path.unshift(current);
+    current = current.parent ? conversation.mapping[current.parent] : undefined;
+  }
+
+  return path;
+}
+
+function compareBranches(a: { path: ChatGptNode[] }, b: { path: ChatGptNode[] }): number {
+  const aFirst = firstVisibleNode(a.path) ?? a.path[0];
+  const bFirst = firstVisibleNode(b.path) ?? b.path[0];
+
+  if (!aFirst || !bFirst) return a.path.length - b.path.length;
+  return compareNodes(aFirst, bFirst);
+}
+
+function firstVisibleNode(path: ChatGptNode[]): ChatGptNode | undefined {
+  return path.find((node) => node.message && !shouldSkipMessage(node.message));
+}
+
+function buildVersionInfo(conversation: ChatGptConversation): Map<ChatGptNode, VersionInfo> {
+  const versionInfo = new Map<ChatGptNode, VersionInfo>();
+
+  for (const node of Object.values(conversation.mapping)) {
+    const siblings = (node.children ?? []).map((childId) => conversation.mapping[childId]).filter((child): child is ChatGptNode => {
+      return child?.message !== undefined && child.message !== null && !shouldSkipMessage(child.message);
+    });
+
+    if (siblings.length <= 1) continue;
+
+    siblings.sort(compareNodes);
+    siblings.forEach((sibling, index) => {
+      versionInfo.set(sibling, {
+        version: index + 1,
+        total: siblings.length
+      });
+    });
+  }
+
+  return versionInfo;
+}
+
+function isSearchResultGroup(value: unknown): value is {
+  domain: string;
+  entries: Array<{
+    title: string;
+    url: string;
+    snippet?: string;
+    attribution?: string;
+  }>;
+} {
+  if (!isRecord(value) || typeof value.domain !== "string") return false;
+
+  const entries = asArray(value.entries);
+  return entries.every((entry) => isRecord(entry) && typeof entry.title === "string" && typeof entry.url === "string");
+}
+
+function isReferenceItem(value: unknown): value is {
+  title: string;
+  url: string;
+  supporting_websites?: unknown;
+} {
+  return isRecord(value) && typeof value.title === "string" && typeof value.url === "string";
+}
+
+function isSupportingWebsite(value: unknown): value is { title: string; url: string } {
+  return isRecord(value) && typeof value.title === "string" && typeof value.url === "string";
+}
+
+function thoughtText(content: Record<string, unknown>): string {
+  return asArray(content.thoughts)
+    .map((thought) => {
+      if (!isRecord(thought)) return "";
+      return asString(thought.content) ?? asString(thought.summary) ?? "";
+    })
+    .filter((text) => text.length > 0)
+    .join("\n\n");
 }
