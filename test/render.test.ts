@@ -4,10 +4,10 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { convertFile, detectProvider, outputPathFor, renderMarkdown } from "../src";
 
-const claudeInputPath = "test/fixtures/tampermonkey/claude/ottosr/input.json";
-const claudeOutputPath = "test/fixtures/tampermonkey/claude/ottosr/output.md";
-const chatGptInputPath = "test/fixtures/tampermonkey/chatgpt/ottosr/input.json";
-const chatGptOutputPath = "test/fixtures/tampermonkey/chatgpt/ottosr/output.md";
+const claudeInputPath = "test/fixtures/tampermonkey/claude/aea/input.json";
+const claudeOutputPath = "test/fixtures/tampermonkey/claude/aea/output.md";
+const chatGptInputPath = "test/fixtures/tampermonkey/chatgpt/aea/input.json";
+const chatGptDeepResearchInputPath = "test/fixtures/tampermonkey/chatgpt/doi-platforms/input.json";
 
 async function readJson(path: string): Promise<unknown> {
   return JSON.parse(await Bun.file(path).text()) as unknown;
@@ -110,11 +110,29 @@ describe("Claude rendering", () => {
 });
 
 describe("ChatGPT rendering", () => {
-  test.failing("[XFAIL] matches the ChatGPT golden fixture", async () => {
+  test("renders the ChatGPT AEA fixture without exporter output", async () => {
     const input = await readJson(chatGptInputPath);
-    const expected = await Bun.file(chatGptOutputPath).text();
+    const markdown = renderMarkdown(input);
 
-    expect(renderMarkdown(input)).toBe(expected);
+    expect(markdown).toContain("# LLM Screening Concerns");
+    expect(markdown).toContain("**Grouped Tool");
+    expect(markdown).toContain("**Search Queries:**");
+    expect(markdown).toContain("**Content References:**");
+  });
+
+  test("renders embedded deep-research reports from ChatGPT app state", async () => {
+    const input = await readJson(chatGptDeepResearchInputPath);
+    const markdown = renderMarkdown(input);
+
+    expect(markdown).toContain("**Embedded App Output:** `Deep Research App_start`");
+    expect(markdown).toContain("**Embedded App Plan:** DOI platforms comparison");
+    expect(markdown).toContain("**Embedded App Report:**");
+    expect(markdown).toContain("# Executive Summary");
+    expect(markdown).toContain("| **Platform**");
+    expect(markdown).toContain("**Content References:**");
+    expect(markdown).toContain("**Citations:**");
+    expect(markdown).toContain("FAQ versioning");
+    expect(markdown).toContain("https://zenodo.org/help/versioning");
   });
 
   test("renders media references and unsupported content fallbacks", () => {

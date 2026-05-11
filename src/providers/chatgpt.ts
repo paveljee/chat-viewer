@@ -174,7 +174,7 @@ function renderMessage(
     formatHeaderLines(headerLines),
     ...entry.thinkingBlocks,
     renderContent(message),
-    renderMetadata(message),
+    renderMetadata(message, options.timeZone),
     ...entry.toolResults.map((toolNode) => renderGroupedToolResult(toolNode, options.timeZone))
   ].filter(Boolean).join("\n\n");
 }
@@ -183,6 +183,10 @@ function renderContent(message: ChatGptMessage): string {
   const content = message.content;
   if (!content) return "";
 
+  return renderContentBlock(content);
+}
+
+function renderContentBlock(content: Record<string, unknown>): string {
   const contentType = asString(content.content_type) ?? "unknown";
 
   switch (contentType) {
@@ -233,15 +237,20 @@ function renderThoughts(content: Record<string, unknown>): string {
   return `<details>\n<summary>ChatGPT thinking</summary>\n\n${thoughts}\n\n</details>`;
 }
 
-function renderMetadata(message: ChatGptMessage): string {
+function renderMetadata(message: ChatGptMessage, timeZone: string | undefined): string {
   const metadata = message.metadata;
   if (!metadata) return "";
 
+  return renderMetadataRecord(metadata, timeZone, true);
+}
+
+function renderMetadataRecord(metadata: Record<string, unknown>, timeZone: string | undefined, includeWidgetState: boolean): string {
   const sections = [
     renderSearchQueries(metadata),
     renderSearchResultGroups(metadata),
     renderContentReferences(metadata),
-    renderCitations(metadata)
+    renderCitations(metadata),
+    includeWidgetState ? renderSdkWidgetState(metadata, timeZone) : ""
   ].filter((section) => section.length > 0);
 
   return sections.join("\n\n");
@@ -255,8 +264,87 @@ function renderGroupedToolResult(node: ChatGptNode, timeZone: string | undefined
     `**Grouped ${roleName(message)} Result**`,
     `*Created:* ${formatDate(message.create_time, timeZone)}`,
     renderContent(message),
-    renderMetadata(message)
+    renderMetadata(message, timeZone)
   ].filter(Boolean).join("\n\n");
+}
+
+function renderSdkWidgetState(metadata: Record<string, unknown>, timeZone: string | undefined): string {
+  const sdk = metadata.chatgpt_sdk;
+  if (!isRecord(sdk)) return "";
+
+  const widgetState = parseJsonRecord(sdk.widget_state);
+  if (!widgetState) return "";
+
+  const sections = [
+    renderWidgetPlan(widgetState),
+    renderWidgetReport(widgetState, timeZone)
+  ].filter((section) => section.length > 0);
+
+  if (sections.length === 0) return "";
+
+  const name = asString(sdk.resource_name) ?? asString(sdk.attribution_id) ?? "embedded app";
+  const lines = [`**Embedded App Output:** \`${name}\``];
+  const status = asString(widgetState.status);
+  const started = asString(widgetState.research_started_at);
+  const stopped = asString(widgetState.research_stopped_at);
+
+  if (status) lines.push(`*Status:* ${status}`);
+  if (started) lines.push(`*Started:* ${formatDate(started, timeZone)}`);
+  if (stopped) lines.push(`*Stopped:* ${formatDate(stopped, timeZone)}`);
+
+  return [...lines, "", ...sections].join("\n");
+}
+
+function renderWidgetPlan(widgetState: Record<string, unknown>): string {
+  const plan = widgetState.plan;
+  if (!isRecord(plan)) return "";
+
+  const steps = asArray(plan.steps).filter(isRecord);
+  if (steps.length === 0) return "";
+
+  const title = asString(plan.title) ?? "Plan";
+  const lines = [`**Embedded App Plan:** ${title}`, ""];
+
+  steps.forEach((step, index) => {
+    const text = asString(step.text) ?? JSON.stringify(step);
+    const status = asString(step.status) ?? "unknown";
+    const reason = asString(step.reason);
+
+    lines.push(`${index + 1}. [${status}] ${text}`);
+    if (reason) lines.push(`   ${reason}`);
+  });
+
+  return lines.join("\n");
+}
+
+function renderWidgetReport(widgetState: Record<string, unknown>, timeZone: string | undefined): string {
+  const report = widgetState.report_message;
+  if (!isRecord(report)) return "";
+
+  const content = report.content;
+  const metadata = report.metadata;
+  const lines = ["**Embedded App Report:**"];
+  const created = asNumber(report.create_time);
+
+  if (created !== undefined) {
+    lines.push(`*Created:* ${formatDate(created, timeZone)}`);
+  }
+
+  if (isRecord(content)) {
+    const renderedContent = renderContentBlock(content);
+    if (renderedContent) {
+      lines.push("", renderedContent);
+    }
+  }
+
+  if (isRecord(metadata)) {
+    const renderedMetadata = renderMetadataRecord(metadata, timeZone, false);
+    if (renderedMetadata) {
+      lines.push("", renderedMetadata);
+    }
+  }
+
+  return lines.join("\n");
 }
 
 function renderSearchQueries(metadata: Record<string, unknown>): string {
@@ -297,10 +385,21 @@ function renderContentReferences(metadata: Record<string, unknown>): string {
   refs.forEach((ref, index) => {
     const matchedText = asString(ref.matched_text);
     const alt = asString(ref.alt);
+    const title = asString(ref.title);
+    const url = asString(ref.url);
+    const snippet = asString(ref.snippet);
+    const attribution = asString(ref.attribution) ?? asString(ref.source_name);
+    const invalidReason = asString(ref.invalid_reason);
     const items = asArray(ref.items).filter(isReferenceItem);
 
-    lines.push(`${index + 1}. ${matchedText ? `\`${matchedText}\`` : "reference"}`);
+    lines.push(`${index + 1}. ${matchedText ? `\`${matchedText}\`` : title ?? "reference"}`);
     if (alt) lines.push(`   *Rendered as:* ${alt}`);
+    if (ref.invalid === true) lines.push(`   *Invalid:* true`);
+    if (invalidReason) lines.push(`   *Issue:* ${invalidReason}`);
+    if (url) lines.push(`   - [${title ?? url}](${url})`);
+    else if (title) lines.push(`   - ${title}`);
+    if (snippet) lines.push(`     ${snippet}`);
+    if (attribution) lines.push(`     *Source:* ${attribution}`);
     for (const item of items) {
       lines.push(`   - [${item.title}](${item.url})`);
       const supportingWebsites = asArray(item.supporting_websites).filter(isSupportingWebsite);
@@ -322,9 +421,13 @@ function renderCitations(metadata: Record<string, unknown>): string {
   citations.forEach((citation, index) => {
     const title = isRecord(citation.metadata) ? asString(citation.metadata.title) : undefined;
     const url = asString(citation.url) ?? (isRecord(citation.metadata) ? asString(citation.metadata.url) : undefined);
+    const text = isRecord(citation.metadata) ? asString(citation.metadata.text) : undefined;
+    const invalidReason = asString(citation.invalid_reason);
     const label = title ?? url ?? "citation";
 
     lines.push(`${index + 1}. ${url ? `[${label}](${url})` : label}`);
+    if (invalidReason) lines.push(`   *Issue:* ${invalidReason}`);
+    if (text) lines.push(`   ${text}`);
   });
 
   return lines.join("\n");
@@ -537,6 +640,18 @@ function isReferenceItem(value: unknown): value is {
 
 function isSupportingWebsite(value: unknown): value is { title: string; url: string } {
   return isRecord(value) && typeof value.title === "string" && typeof value.url === "string";
+}
+
+function parseJsonRecord(value: unknown): Record<string, unknown> | undefined {
+  if (isRecord(value)) return value;
+  if (typeof value !== "string" || value.trim().length === 0) return undefined;
+
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return isRecord(parsed) ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function thoughtText(content: Record<string, unknown>): string {

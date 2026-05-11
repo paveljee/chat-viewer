@@ -13,7 +13,7 @@ OpenAI chats
 render them as a
 human-readable Markdown file
 (example here:
-`test/fixtures/tampermonkey/claude/ottosr/output.md`).
+`test/fixtures/tampermonkey/claude/aea/output.md`).
 
 Particular attention is paid to
 reflecting **all** text/media content
@@ -24,15 +24,15 @@ all branches of convo.
 
 There is a text fixture at
 `test/fixtures/tampermonkey`;
-`test/fixtures/tampermonkey/claude/ottosr/input.json`
+`test/fixtures/tampermonkey/claude/aea/input.json`
 is sample input in raw Anthropic API format and
-`test/fixtures/tampermonkey/claude/ottosr/output.md` is
+`test/fixtures/tampermonkey/claude/aea/output.md` is
 how the Claude tampermonkey script
 (`src/tampermonkey/Claude API Exporter-5.4.1.user.js`)
 presents it.
 Now,
 there is also an input fixture
-`test/fixtures/tampermonkey/chatgpt/ottosr/input.json` for
+`test/fixtures/tampermonkey/chatgpt/aea/input.json` for
 the ChatGPT tampermonkey script
 (`src/tampermonkey/ChatGPT Exporter-2.32.0.user.js`)
 but no output
@@ -55,47 +55,40 @@ Native Bun tooling is used for all TS/JS work.
 
 # how ai understood the spec
 
-This project should become a small, reliable Bun/TypeScript CLI that converts raw
-LLM conversation JSON into a Markdown record suitable for humans to read,
-audit, share, and archive.
+This is a small Bun/TypeScript CLI for converting raw Anthropic and OpenAI chat
+JSON into human-readable Markdown records. The intended workflow is deliberately
+low-ceremony: pass a JSON file, detect the provider from shape, and write a
+same-directory `.md` file with the same base name.
 
-The expected user experience is intentionally simple: give the CLI a JSON file,
-and it writes a Markdown file next to it with the same base name. The tool should
-work for both Anthropic/Claude exports and OpenAI/ChatGPT exports, with provider
-detection handled from the JSON shape rather than from user ceremony.
+The product bar is archival fidelity. The renderer should preserve the
+conversation as evidence: text, roles, order, timestamps, model metadata,
+branches, alternate versions, thinking/tool/search traces, citations, media
+references, attachments, and artifacts. If the source JSON contains content, the
+Markdown should render it or explicitly account for it. Silent omission is the
+primary risk.
 
-The product bar is fidelity, not summarization. The Markdown must preserve the
-conversation as a record: message order, roles, timestamps, model metadata,
-branches/alternate versions, thinking/tool/search sections when present,
-attachments/media references, code blocks, and every artifact or generated file
-that is represented in the source data. If the source JSON contains content, the
-Markdown should either render it directly or make its existence and reference
-clear. Silent omission is the main failure mode to avoid.
+Claude output remains the reference information architecture. The
+`claude/aea` fixture and Claude Tampermonkey script define the desired
+shape: conversation metadata, title, separators, numbered turn headers, branch
+and version labels, timestamps, collapsible thinking blocks, explicit tool
+activity, and side-branch preservation.
 
-The Claude Tampermonkey exporter is the best reference for output semantics. Its
-sample `output.md` shows the desired shape: conversation-level metadata, a clear
-title, separators between turns, numbered message headers, branch labels,
-version labels, timestamps, collapsible thinking blocks, explicit tool/search
-activity, and preservation of side branches. The new CLI does not need to clone
-the browser script, but it should reproduce the same information architecture in
-a deterministic offline renderer.
+OpenAI output should follow that Claude-style standard rather than the ChatGPT
+Tampermonkey Markdown export. The ChatGPT exporter is useful for schema
+reconnaissance, but its Markdown path is too lossy. The OpenAI renderer must
+walk the `mapping` tree, surface relevant branches, group tool calls/results
+readably, and preserve citations, content references, media, reasoning traces,
+and generated artifacts.
 
-The ChatGPT Tampermonkey script is useful mostly as schema reconnaissance, not
-as the output model. Its Markdown exporter follows only the selected/current path
-through `mapping`, skips many non-chat nodes, and is therefore too lossy for this
-project's goal. For OpenAI data, the CLI should instead apply the Claude-style
-standard: understand the `mapping` tree, recover all relevant branches, and
-surface tool calls, tool results, images, citations, and reasoning/thought nodes
-where the raw export provides them.
+The `chatgpt/doi-platforms` fixture is a critical OpenAI acceptance case. Its
+deep-research report lives inside embedded app widget state, not as a normal
+visible assistant message, so the renderer must extract that report, plan,
+citations, and content references from metadata rather than dropping it as
+hidden UI plumbing.
 
-Success should be judged with fixtures and golden Markdown output. The existing
-Claude fixture gives the clearest acceptance target. The ChatGPT fixture is
-large and branch/tool-heavy, so it should drive coverage for OpenAI tree
-handling and content preservation. Tests should run under Bun through `mise`,
-and `make lint` should remain a strict TypeScript typecheck gate.
-
-Current repo state: the specification, fixtures, exporter references, and
-toolchain pins are present; the actual Bun package, CLI implementation, and test
-suite still need to be built. The first implementation milestone should be a
-minimal CLI plus provider-specific parsers that can reproduce the Claude golden
-fixture before broadening OpenAI coverage.
+Current repo state: the CLI, provider detection, renderers, Bun tests, strict
+typecheck, and fixture coverage are in place. Claude has an exact golden output
+test. ChatGPT coverage is fixture-driven rather than golden-driven, with tests
+for AEA fixture preservation, deep-research embedded output, media references, and
+unsupported content fallbacks. All toolchain execution should continue through
+`mise`, `.tool-versions`, native Bun tooling, `make test`, and `make lint`.

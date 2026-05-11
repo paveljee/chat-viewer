@@ -23,22 +23,29 @@ Last updated: 2026-05-11
 - The target is a Bun/TypeScript CLI that reads raw Anthropic or OpenAI
   conversation JSON and writes a Markdown file next to the input with the same
   base filename.
-- The Claude fixture and exporter output style are the primary output contract.
+- The Claude AEA fixture and exporter output style are the primary output
+  contract.
 - Claude rendering currently matches the checked-in golden fixture exactly.
-- ChatGPT/OpenAI JSON is detected, rendered with branch/version labels, and now
-  has a checked-in golden Markdown fixture.
+- ChatGPT/OpenAI JSON is detected and rendered with branch/version labels. Per
+  the updated spec, the ChatGPT Tampermonkey Markdown output is not used as a
+  golden because it is too lossy.
 - Claude artifact `create`/`update`/`rewrite` chains are reconstructed per
   branch, with version metadata preserved in the Markdown.
 - ChatGPT thinking blocks and tool results are grouped into the related
   assistant turns where possible, reducing standalone tool-noise while
   preserving the raw content.
+- ChatGPT embedded app widget state is rendered when it contains user-relevant
+  output, including the deep-research report, plan, citations, and content
+  references in `test/fixtures/tampermonkey/chatgpt/doi-platforms/input.json`.
 - Tests now cover artifact reconstruction, media references, and unsupported
   content fallbacks.
 
 ## Next Steps
 
-- [ ] Review the grouped ChatGPT golden output with a human reader and tune
-  labels if needed.
+- [ ] Review generated ChatGPT deep-research Markdown with a human reader and
+  tune labels or citation verbosity if needed.
+- [ ] Add coverage for additional OpenAI generated-file/canvas artifact shapes
+  when representative exports are available.
 - [ ] Add fixture coverage for divergent Claude artifact branches if a real
   export with that shape becomes available.
 - [ ] Consider small CLI ergonomics only after rendering behavior settles
@@ -65,9 +72,9 @@ Last updated: 2026-05-11
 - [x] Added CLI entrypoint at `src/cli.ts`.
 - [x] Implemented provider detection for Claude-style and ChatGPT-style raw JSON.
 - [x] Implemented Claude Markdown rendering against
-  `test/fixtures/tampermonkey/claude/input.json`.
+  `test/fixtures/tampermonkey/claude/aea/input.json`.
 - [x] Added a golden test comparing generated Claude Markdown to
-  `test/fixtures/tampermonkey/claude/output.md`.
+  `test/fixtures/tampermonkey/claude/aea/output.md`.
 - [x] Added conservative ChatGPT rendering and a smoke test against the ChatGPT
   fixture.
 - [x] Ran `make test`: 5 passing tests.
@@ -75,10 +82,8 @@ Last updated: 2026-05-11
 - [x] Improved ChatGPT/OpenAI rendering with branch labels, version labels,
   search query rendering, search result rendering, content references, and
   citation sections.
-- [x] Added `test/fixtures/tampermonkey/chatgpt/output.md` as a golden fixture.
-- [x] Changed ChatGPT test coverage from a smoke test to exact golden comparison.
-- [x] Re-ran `make test`: 5 passing tests.
-- [x] Re-ran `make lint`: strict TypeScript typecheck passing.
+- [x] Added temporary ChatGPT golden comparison coverage during early renderer
+  development.
 - [x] Added a concise `README.md`.
 - [x] Added AI coding environment context to `README.md`.
 - [x] Added Tampermonkey script acknowledgments to `README.md`.
@@ -87,9 +92,17 @@ Last updated: 2026-05-11
 - [x] Grouped ChatGPT thinking/tool-result chains into related assistant turns.
 - [x] Added tests for Claude artifact reconstruction, ChatGPT media references,
   and unsupported content fallbacks.
-- [x] Regenerated `test/fixtures/tampermonkey/chatgpt/output.md` for the grouped
-  ChatGPT output.
 - [x] Re-ran `make test`: 7 passing tests.
+- [x] Re-ran `make lint`: strict TypeScript typecheck passing.
+- [x] Re-read updated `SPEC.md` human section and aligned tests with the nested
+  fixture paths.
+- [x] Removed reliance on a ChatGPT Tampermonkey Markdown golden; the updated
+  spec says that output is suboptimal.
+- [x] Rendered ChatGPT embedded app widget state so the DOI-platforms
+  deep-research report, plan, citations, and content references are preserved.
+- [x] Added DOI-platforms fixture coverage for deep-research artifact
+  preservation.
+- [x] Re-ran `make test`: 8 passing tests.
 - [x] Re-ran `make lint`: strict TypeScript typecheck passing.
 
 ## Background Notes
